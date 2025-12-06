@@ -64,12 +64,12 @@
         // ⚠️⚠️⚠️ 關鍵設定區 ⚠️⚠️⚠️
         // 如果您下載此檔案，請將下方的 "YOUR_..." 替換為您 Firebase Console 中的真實設定
         const userFirebaseConfig = {
-            apiKey: "AIzaSyDwTot-z8M7mpMmB3hvtn8-3KkfUs-lndI",
-  authDomain: "tripsync-myplan.firebaseapp.com",
-  projectId: "tripsync-myplan",
-  storageBucket: "tripsync-myplan.firebasestorage.app",
-  messagingSenderId: "538565101058",
-  appId: "1:538565101058:web:9f8c41bfd334124a07091b"
+            apiKey: "YOUR_API_KEY", 
+            authDomain: "YOUR_PROJECT.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT.appspot.com",
+            messagingSenderId: "SENDER_ID",
+            appId: "APP_ID"
         };
 
         // 自動判斷：若在預覽環境使用內建變數，若下載後則使用上方設定
@@ -919,6 +919,21 @@
             const [joinId, setJoinId] = useState('');
             const [isCreating, setIsCreating] = useState(false);
             const [newTripName, setNewTripName] = useState('');
+            const [deleteTripId, setDeleteTripId] = useState(null); // State for modal
+
+            // Add handleDeleteTrip function
+            const handleDeleteTrip = (tripId) => {
+                setDeleteTripId(tripId);
+            };
+
+            const confirmDeleteTrip = () => {
+                if (!deleteTripId) return;
+                const current = JSON.parse(localStorage.getItem(`my_trips_${userId}`) || '[]');
+                const updated = current.filter(id => id !== deleteTripId);
+                localStorage.setItem(`my_trips_${userId}`, JSON.stringify(updated));
+                setTrips(prev => prev.filter(t => t.id !== deleteTripId));
+                setDeleteTripId(null);
+            };
 
             useEffect(() => {
                 if (!userId) return;
@@ -990,12 +1005,37 @@
                         {trips.map(trip => (
                             <div key={trip.id} onClick={() => onSelectTrip(trip.id)} className={`${theme.card} p-5 active:scale-95 transition-all cursor-pointer relative overflow-hidden group hover:shadow-md`}>
                                 <div className="flex justify-between items-center">
-                                    <div><h4 className="font-bold text-lg text-slate-800">{trip.name}</h4><p className="text-[10px] text-slate-400 mt-1 font-mono tracking-wide">ID: {trip.id.slice(0, 6)}</p></div>
-                                    <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-slate-800 group-hover:text-white transition-colors"><ArrowLeft className="w-4 h-4 rotate-180" /></div>
+                                    <div>
+                                        <h4 className="font-bold text-lg text-slate-800">{trip.name}</h4>
+                                        <p className="text-[10px] text-slate-400 mt-1 font-mono tracking-wide">ID: {trip.id.slice(0, 6)}</p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); handleDeleteTrip(trip.id); }}
+                                            className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-colors"
+                                        >
+                                            <Trash2 className="w-5 h-5" />
+                                        </button>
+                                        <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-slate-800 group-hover:text-white transition-colors"><ArrowLeft className="w-4 h-4 rotate-180" /></div>
+                                    </div>
                                 </div>
                             </div>
                         ))}
                     </div>
+
+                    {/* Delete Confirmation Modal */}
+                    {deleteTripId && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4 animate-in zoom-in-95">
+                            <div className="bg-white p-6 rounded-2xl shadow-2xl max-w-xs w-full">
+                                <h3 className="text-lg font-bold text-slate-800 mb-2">確定移除行程？</h3>
+                                <p className="text-sm text-slate-500 mb-6">這只會從列表中移除捷徑，不會刪除雲端資料。</p>
+                                <div className="flex gap-3">
+                                    <button onClick={() => setDeleteTripId(null)} className="flex-1 py-2 font-bold text-slate-500 bg-slate-100 rounded-lg">取消</button>
+                                    <button onClick={confirmDeleteTrip} className="flex-1 py-2 font-bold text-white bg-rose-500 rounded-lg shadow-lg">移除</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         };
