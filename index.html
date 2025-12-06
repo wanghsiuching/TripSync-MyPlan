@@ -499,8 +499,7 @@
             );
         };
 
-        const NodeCard = ({ node, index, members, existingDays, currencies, onUpdate, onDeleteRequest, onReorder, onDragStart, onDragOver, onDrop, isDragging, tripId }) => {
-            const [isEditing, setIsEditing] = useState(false);
+        const NodeCard = ({ node, index, members, existingDays, currencies, onUpdate, onDeleteRequest, onReorder, onDragStart, onDragOver, onDrop, isDragging, isEditing, onEdit, onDone }) => {
             const [expanded, setExpanded] = useState(true);
 
             const getStyle = () => {
@@ -559,8 +558,8 @@
                                     {node.type === 'hotel' && (
                                         <div className="space-y-2">
                                             <div className="grid grid-cols-2 gap-2 bg-amber-50/50 p-2 rounded text-xs">
-                                                <div><span className="opacity-50 block">Check-in</span><span className="font-mono">{node.checkIn ? new Date(node.checkIn).toLocaleString() : '--'}</span></div>
-                                                <div><span className="opacity-50 block">Check-out</span><span className="font-mono">{node.checkOut ? new Date(node.checkOut).toLocaleString() : '--'}</span></div>
+                                                <div><span className="opacity-50 block">Check-in</span><span className="font-mono">{node.checkIn && !isNaN(new Date(node.checkIn)) ? new Date(node.checkIn).toLocaleString() : '--'}</span></div>
+                                                <div><span className="opacity-50 block">Check-out</span><span className="font-mono">{node.checkOut && !isNaN(new Date(node.checkOut)) ? new Date(node.checkOut).toLocaleString() : '--'}</span></div>
                                             </div>
                                             {node.meals && <div className="flex gap-2 text-xs font-bold text-amber-700 bg-amber-100/50 p-2 rounded w-fit"><Utensils className="w-3 h-3"/> {node.meals.breakfast&&<span>早餐</span>}{node.meals.lunch&&<span>午餐</span>}{node.meals.dinner&&<span>晚餐</span>}</div>}
                                         </div>
@@ -570,7 +569,7 @@
                                         <div className="flex gap-1" onClick={(e)=>e.stopPropagation()}>
                                             <button onClick={() => onReorder(index, -1)} className="p-1 hover:bg-black/5 rounded text-slate-400"><ArrowUp className="w-4 h-4"/></button>
                                             <button onClick={() => onReorder(index, 1)} className="p-1 hover:bg-black/5 rounded text-slate-400"><ArrowDown className="w-4 h-4"/></button>
-                                            <button onClick={() => setIsEditing(true)} className="p-1 bg-slate-800 text-white rounded shadow ml-2 hover:bg-slate-700"><Edit3 className="w-4 h-4"/></button>
+                                            <button onClick={onEdit} className="p-1 bg-slate-800 text-white rounded shadow ml-2 hover:bg-slate-700"><Edit3 className="w-4 h-4"/></button>
                                             <button onClick={() => onDeleteRequest(index)} className="p-1 bg-white border border-slate-200 text-slate-300 hover:text-rose-500 rounded ml-1"><Trash2 className="w-4 h-4"/></button>
                                         </div>
                                         {node.cost > 0 && <div className={`font-mono font-bold text-xs flex items-center gap-1 ${node.isPotential ? 'text-purple-700' : 'text-emerald-700'}`}><DollarSign className="w-3 h-3"/> ${parseInt(node.cost * ((node.useForeignCurrency && currencies.find(c=>c.name===node.currency)?.rate) || 1)).toLocaleString()} (TWD)</div>}
@@ -584,7 +583,7 @@
 
             return (
                 <div className="mb-6 ml-4 rounded-xl border-2 border-slate-800 shadow-2xl bg-white overflow-hidden animate-in zoom-in-95 relative z-20">
-                    <div className="bg-slate-800 text-white px-4 py-3 flex justify-between items-center"><span className="text-xs font-bold uppercase flex items-center gap-2"><Edit3 className="w-4 h-4"/> 編輯項目</span><button onClick={() => setIsEditing(false)} className="hover:bg-slate-700 p-1 rounded"><X className="w-5 h-5"/></button></div>
+                    <div className="bg-slate-800 text-white px-4 py-3 flex justify-between items-center"><span className="text-xs font-bold uppercase flex items-center gap-2"><Edit3 className="w-4 h-4"/> 編輯項目</span><button onClick={onDone} className="hover:bg-slate-700 p-1 rounded"><X className="w-5 h-5"/></button></div>
                     <div className="p-5 space-y-5">
                         <div className="space-y-3">
                             <Label text="標題" icon={<FileText className="w-3 h-3"/>} />
@@ -647,8 +646,257 @@
                         )}
                         <div><Label text="備忘錄" icon={<FileText className="w-3 h-3"/>} /><textarea value={node.memo || ''} onChange={e => handleFieldChange('memo', e.target.value)} className={`${theme.input} h-24`} placeholder="輸入注意事項..." /></div>
                         <ExpenseCalculator node={node} members={members} currencies={currencies} onChange={handleFieldChange} />
-                        <button onClick={() => setIsEditing(false)} className="w-full py-3 rounded-xl text-sm font-bold text-white bg-slate-800 shadow-lg flex items-center justify-center active:scale-95 transition-transform mt-4"><Check className="w-4 h-4 mr-2"/> 完成編輯</button>
+                        <button onClick={onDone} className="w-full py-3 rounded-xl text-sm font-bold text-white bg-slate-800 shadow-lg flex items-center justify-center active:scale-95 transition-transform mt-4"><Check className="w-4 h-4 mr-2"/> 完成編輯</button>
                     </div>
+                </div>
+            );
+        };
+
+        const TripDetailScreen = ({ userId, tripId, onBack }) => {
+            const [tripData, setTripData] = useState(null);
+            const [showShare, setShowShare] = useState(false);
+            const [isAdding, setIsAdding] = useState(false);
+            const [deleteConfirmIndex, setDeleteConfirmIndex] = useState(null);
+            const [showMemberModal, setShowMemberModal] = useState(false);
+            const [newMemberName, setNewMemberName] = useState('');
+            const [selectedMemberStats, setSelectedMemberStats] = useState(null);
+            const [showOverview, setShowOverview] = useState(false);
+            const [showSettings, setShowSettings] = useState(false);
+            const [draggedNodeIndex, setDraggedNodeIndex] = useState(null);
+            const [editingNodeId, setEditingNodeId] = useState(null); // Lifted State for Edit Mode
+
+            useEffect(() => {
+                if (!tripId) return;
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', tripId);
+                const unsubscribe = onSnapshot(docRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        const cleanNodes = (data.nodes || []).map(sanitizeNodeData);
+                        const cleanData = {
+                            ...data,
+                            nodes: cleanNodes,
+                            members: data.members || [],
+                            dayLabels: data.dayLabels || {},
+                            currencies: data.currencies || [{id:1, name:'JPY', rate:0.21}, {id:2, name:'USD', rate:32}]
+                        };
+                        setTripData({ id: docSnap.id, ...cleanData });
+                    }
+                });
+                return () => unsubscribe();
+            }, [tripId]);
+
+            const memberStats = useMemo(() => {
+                if (!tripData) return {};
+                const stats = {};
+                const currencies = tripData.currencies || [];
+                tripData.members.forEach((m, idx) => {
+                    stats[m.id] = { index: idx, actual: 0, potential: 0, luggage: { checked: 0, carry: 0 } };
+                });
+                tripData.nodes.forEach(node => {
+                    let currentRate = 1;
+                    if(node.useForeignCurrency && node.currency) {
+                        const curr = currencies.find(c => c.name === node.currency);
+                        if(curr) currentRate = curr.rate;
+                    }
+                    const baseCost = parseFloat(node.cost) || 0;
+                    const fuelCost = parseFloat(node.fuelCost) || 0;
+                    const rentalExtras = (node.rentalExpenses || []).reduce((acc, c) => acc + (parseFloat(c.cost)||0), 0);
+                    const totalBaseInTWD = Math.round((baseCost + rentalExtras) * currentRate);
+                    if (totalBaseInTWD > 0) {
+                        const totalNodeCost = totalBaseInTWD * (1 + (parseFloat(node.feePercent) || 0) / 100);
+                        const involvedIds = node.involvedMembers || tripData.members.map(m => m.id);
+                        const splitCost = involvedIds.length > 0 ? totalNodeCost / involvedIds.length : 0;
+                        involvedIds.forEach(mId => {
+                            if (stats[mId]) {
+                                if (node.isPotential) stats[mId].potential += splitCost;
+                                else stats[mId].actual += splitCost;
+                            }
+                        });
+                    }
+                    if (fuelCost > 0 && node.type === 'rental') {
+                        const involvedIds = node.involvedMembers || tripData.members.map(m => m.id);
+                        const splitFuel = involvedIds.length > 0 ? fuelCost / involvedIds.length : 0;
+                        involvedIds.forEach(mId => {
+                            if (stats[mId]) stats[mId].potential += splitFuel;
+                        });
+                    }
+                    if (node.type === 'flight' && node.luggage) {
+                        Object.entries(node.luggage).forEach(([mId, lug]) => {
+                            if (stats[mId]) {
+                                if(lug.checked) stats[mId].luggage.checked = lug.checked;
+                                if(lug.carry) stats[mId].luggage.carry = lug.carry;
+                            }
+                        });
+                    }
+                });
+                Object.keys(stats).forEach(k => {
+                    stats[k].actual = Math.round(stats[k].actual);
+                    stats[k].potential = Math.round(stats[k].potential);
+                });
+                return stats;
+            }, [tripData]);
+
+            const saveTrip = async (newData) => {
+                setTripData(prev => ({ ...prev, ...newData })); 
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', tripId);
+                await updateDoc(docRef, newData);
+            };
+
+            const handleUpdateNode = (index, updatedNode) => {
+                const newNodes = [...tripData.nodes];
+                newNodes[index] = updatedNode;
+                saveTrip({ nodes: newNodes });
+            };
+
+            const handleDragStart = (e, index) => { setDraggedNodeIndex(index); e.dataTransfer.effectAllowed = "move"; };
+            const handleDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
+            const handleDrop = (e, targetIndex) => {
+                e.preventDefault();
+                if (draggedNodeIndex === null || draggedNodeIndex === targetIndex) return;
+                const newNodes = [...tripData.nodes];
+                const [draggedItem] = newNodes.splice(draggedNodeIndex, 1);
+                newNodes.splice(targetIndex, 0, draggedItem);
+                const targetDay = newNodes[targetIndex+1]?.day || newNodes[targetIndex-1]?.day || draggedItem.day;
+                if (targetDay && draggedItem.day !== targetDay) newNodes[targetIndex].day = targetDay;
+                saveTrip({ nodes: newNodes });
+                setDraggedNodeIndex(null);
+            };
+
+            const handleReorderNode = (index, direction) => {
+                const newNodes = [...tripData.nodes];
+                const targetIndex = index + direction;
+                if (targetIndex < 0 || targetIndex >= newNodes.length) return;
+                [newNodes[index], newNodes[targetIndex]] = [newNodes[targetIndex], newNodes[index]];
+                saveTrip({ nodes: newNodes });
+            };
+
+            const handleUpdateDayLabel = (day, label) => {
+                const newLabels = { ...(tripData.dayLabels || {}), [day]: label };
+                saveTrip({ dayLabels: newLabels });
+            };
+
+            const handleDeleteRequest = (index) => setDeleteConfirmIndex(index);
+            const confirmDelete = () => {
+                if (deleteConfirmIndex === null) return;
+                const newNodes = tripData.nodes.filter((_, i) => i !== deleteConfirmIndex);
+                saveTrip({ nodes: newNodes });
+                setDeleteConfirmIndex(null);
+            };
+
+            const handleAddNode = (type) => {
+                const currentMaxDay = tripData.nodes.length > 0 ? Math.max(...tripData.nodes.map(n => n.day || 1)) : 1;
+                const newNode = sanitizeNodeData({
+                    type: type,
+                    title: type === 'flight' ? '新航班' : type === 'rental' ? '租車' : type === 'hotel' ? '住宿' : '新行程',
+                    day: currentMaxDay,
+                    cost: '',
+                    feePercent: '1.5',
+                    isPotential: false,
+                });
+                newNode.involvedMembers = tripData.members.map(m => m.id);
+                saveTrip({ nodes: [...(tripData.nodes || []), newNode] });
+                setIsAdding(false);
+            };
+
+            const handleAddMember = () => {
+                if (!newMemberName.trim()) return;
+                const newMember = { id: Date.now().toString(), name: newMemberName.trim(), inventory: [] };
+                saveTrip({ members: [...(tripData.members || []), newMember] });
+                setNewMemberName('');
+            };
+
+            const groupedNodes = {};
+            const existingDays = [];
+            if(tripData){
+                tripData.nodes.forEach((node, index) => {
+                    const d = node.day || 1;
+                    if (!existingDays.includes(d)) existingDays.push(d);
+                    if (!groupedNodes[d]) groupedNodes[d] = [];
+                    groupedNodes[d].push({ ...node, originalIndex: index });
+                });
+                existingDays.sort((a,b) => a-b);
+            }
+
+            if (!tripData) return <div className="flex h-screen items-center justify-center text-slate-400">載入旅程中...</div>;
+
+            return (
+                <div className={`flex flex-col h-screen ${theme.bg} relative`}>
+                    <div className="bg-white/90 backdrop-blur-md p-3 sticky top-0 z-30 border-b border-slate-200 shadow-sm flex flex-col gap-2">
+                        <div className="flex justify-between items-center">
+                            <button onClick={onBack} className="p-2 -ml-2 text-slate-600 rounded-full"><ArrowLeft className="w-5 h-5" /></button>
+                            <h1 className="font-bold text-slate-800 truncate max-w-[150px]">{tripData.name}</h1>
+                            <div className="flex gap-1">
+                                <button onClick={() => setShowSettings(true)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-full"><Settings className="w-5 h-5" /></button>
+                                <button onClick={() => setShowOverview(true)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-full"><Grid className="w-5 h-5" /></button>
+                                <button onClick={() => { if(copyToClipboard(tripId)) alert("ID 已複製"); }} className="p-2 -mr-2 text-slate-600 hover:bg-slate-100 rounded-full"><Share2 className="w-5 h-5" /></button>
+                            </div>
+                        </div>
+                        <div className="flex gap-4 overflow-x-auto pb-1 scrollbar-hide justify-center px-4">
+                            {tripData.members.map((m, idx) => (
+                                <MemberAvatar key={m.id} member={m} index={idx} onClick={() => setSelectedMemberStats({ member: m, stats: memberStats[m.id] })} />
+                            ))}
+                            <button onClick={() => setShowMemberModal(true)} className="flex flex-col items-center justify-center min-w-[40px]">
+                                <div className="w-12 h-12 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 hover:border-slate-500 hover:text-slate-500"><Plus className="w-5 h-5" /></div>
+                                <span className="text-[10px] mt-1 text-slate-400">成員</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4 pb-32">
+                        {Object.keys(groupedNodes).length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full text-slate-300"><Tent className="w-16 h-16 mb-4 opacity-20" /><p>點擊下方「+」開始</p></div>
+                        ) : (
+                            Object.keys(groupedNodes).sort((a,b)=>a-b).map(day => (
+                                <div key={day} className="mb-8">
+                                    <div className="sticky top-0 z-20 flex items-center gap-4 mb-6 pt-2 bg-[#fdfbf7]/90 backdrop-blur-sm pb-2">
+                                        <div className="bg-slate-800 text-white px-3 py-1 rounded-full font-black text-xs shadow-md shrink-0">DAY {day}</div>
+                                        <input type="text" placeholder={`自訂標題 (如: 抵達${day === '1' ? '首日' : '當天'})`} className="bg-transparent border-b border-dashed border-slate-400 focus:border-slate-800 outline-none text-sm font-bold text-slate-600 placeholder:text-slate-300 w-full" value={(tripData.dayLabels && tripData.dayLabels[day]) || ''} onChange={(e) => handleUpdateDayLabel(day, e.target.value)} />
+                                        <button onClick={() => copyDayItinerary(day, tripData.nodes, tripData.dayLabels[day])} className="p-2 bg-slate-200 text-slate-600 rounded-full hover:bg-slate-300"><Copy className="w-4 h-4" /></button>
+                                    </div>
+                                    {groupedNodes[day].map((nodeWithIdx) => (
+                                        <NodeCard 
+                                            key={nodeWithIdx.originalIndex} 
+                                            index={nodeWithIdx.originalIndex} 
+                                            node={nodeWithIdx} 
+                                            members={tripData.members} 
+                                            existingDays={existingDays} 
+                                            currencies={tripData.currencies} 
+                                            onUpdate={handleUpdateNode} 
+                                            onDeleteRequest={handleDeleteRequest} 
+                                            onReorder={handleReorderNode} 
+                                            onDragStart={handleDragStart} 
+                                            onDragOver={handleDragOver} 
+                                            onDrop={handleDrop} 
+                                            isDragging={draggedNodeIndex === nodeWithIdx.originalIndex} 
+                                            isEditing={editingNodeId === nodeWithIdx.id}
+                                            onEdit={() => setEditingNodeId(nodeWithIdx.id)}
+                                            onDone={() => setEditingNodeId(null)}
+                                            tripId={tripId} 
+                                        />
+                                    ))}
+                                </div>
+                            ))
+                        )}
+                    </div>
+                    <div className="fixed bottom-6 left-0 right-0 flex justify-center z-30 pointer-events-none">
+                        <div className="pointer-events-auto">
+                            {!isAdding ? (
+                                <button onClick={() => setIsAdding(true)} className={`${theme.btnPrimary} rounded-full px-6 py-4 shadow-[0_8px_20px_-5px_rgba(0,0,0,0.3)] flex items-center gap-2 border-4 border-white`}><Plus className="w-6 h-6" /> 新增</button>
+                            ) : (
+                                <div className="bg-white rounded-2xl shadow-2xl p-4 border border-slate-100 w-[90vw] max-w-sm animate-in slide-in-from-bottom-5">
+                                    <div className="flex justify-between items-center mb-4"><span className="font-bold text-slate-500 ml-2">選擇類型</span><button onClick={() => setIsAdding(false)} className="p-1 hover:bg-slate-100 rounded-full"><X className="w-5 h-5"/></button></div>
+                                    <div className="grid grid-cols-4 gap-2">
+                                        {[ { id: 'flight', label: '航班', icon: <Plane className="w-5 h-5"/>, color: 'bg-sky-50 text-sky-600' }, { id: 'rental', label: '租車', icon: <Car className="w-5 h-5"/>, color: 'bg-orange-50 text-orange-600' }, { id: 'hotel', label: '住宿', icon: <Home className="w-5 h-5"/>, color: 'bg-amber-50 text-amber-600' }, { id: 'note', label: '行程', icon: <MapPin className="w-5 h-5"/>, color: 'bg-rose-50 text-rose-600' } ].map(type => ( <button key={type.id} onClick={() => handleAddNode(type.id)} className={`flex flex-col items-center p-3 rounded-xl gap-2 hover:scale-95 transition-transform ${type.color}`}>{type.icon}<span className="text-xs font-bold">{type.label}</span></button> ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    {deleteConfirmIndex !== null && ( <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4"> <div className="bg-white p-6 rounded-2xl shadow-2xl max-w-xs w-full animate-in zoom-in-95"> <h3 className="text-lg font-bold text-slate-800 mb-2">確定刪除嗎？</h3> <div className="flex gap-3 mt-6"> <button onClick={() => setDeleteConfirmIndex(null)} className="flex-1 py-3 font-bold text-slate-500 bg-slate-100 rounded-xl">取消</button> <button onClick={confirmDelete} className="flex-1 py-3 font-bold text-white bg-rose-500 rounded-xl shadow-lg">刪除</button> </div> </div> </div> )}
+                    {showSettings && <SettingsModal currencies={tripData.currencies} onUpdateCurrencies={(c) => saveTrip({ currencies: c })} onClose={() => setShowSettings(false)} />}
+                    {showOverview && <TripOverviewModal tripData={tripData} stats={memberStats} onClose={() => setShowOverview(false)} />}
+                    {selectedMemberStats && <MemberRPGModal member={selectedMemberStats.member} stats={selectedMemberStats.stats} tripId={tripId} onClose={() => setSelectedMemberStats(null)} />}
+                    {showMemberModal && ( <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/20 backdrop-blur-sm sm:p-4"> <div className="bg-white w-full sm:max-w-sm sm:rounded-2xl rounded-t-2xl shadow-2xl h-[40vh] flex flex-col animate-in slide-in-from-bottom-10"> <div className="p-4 border-b border-slate-100 flex justify-between items-center"> <h3 className="font-bold text-lg">旅伴成員</h3> <button onClick={() => setShowMemberModal(false)} className="p-2 bg-slate-50 rounded-full"><X className="w-5 h-5"/></button> </div> <div className="p-4 flex-1 overflow-y-auto"> <div className="flex gap-2 mb-6"> <input value={newMemberName} onChange={(e) => setNewMemberName(e.target.value)} placeholder="輸入名字..." className={`${theme.input} flex-1`} /> <button onClick={handleAddMember} className="bg-slate-800 text-white px-4 rounded-lg font-bold text-sm">新增</button> </div> </div> </div> </div> )}
+                    {isAdding && <div className="fixed inset-0 bg-black/10 z-20 backdrop-blur-[1px]" onClick={() => setIsAdding(false)}></div>}
                 </div>
             );
         };
